@@ -84,6 +84,28 @@ class ReadIntegerTest < Minitest::Test
     assert_equal 255, result
   end
 
+  def test_custom_base_accepts_uppercase_prefixes_and_signs
+    cases = [
+      ["FF\n", 16, 255],
+      ["0xff\n", 16, 255],
+      ["-FF\n", 16, -255],
+      ["0b101\n", 2, 5]
+    ]
+
+    cases.each do |raw, base, expected|
+      result = read_integer(base: base, input: StringIO.new(raw), output: StringIO.new)
+      assert_equal expected, result, "for input #{raw.inspect} in base #{base}"
+    end
+  end
+
+  def test_retries_invalid_digits_in_custom_base
+    output = StringIO.new
+    result = read_integer(base: 16, input: StringIO.new("fg\n2A\n"), output: output)
+
+    assert_equal 42, result
+    assert_includes output.string, "Geçersiz tamsayı: 'fg'."
+  end
+
   def test_retry_prompts_distinguish_invalid_digits_and_range
     input = StringIO.new("2\n111\n101\n")
     output = StringIO.new
@@ -122,5 +144,19 @@ class ReadIntegerTest < Minitest::Test
       assert_empty stderr
       assert_equal "Lütfen bir tamsayı girin [ENTER sonlandırır]: #{expected}", stdout
     end
+  end
+
+  def test_cli_retries_after_invalid_input
+    script = File.expand_path("../read_integer.rb", __dir__)
+    stdout, stderr, status = Open3.capture3(script, stdin_data: "abc\n7\n")
+
+    assert status.success?, "exited with #{status.exitstatus}: #{stderr}"
+    assert_empty stderr
+    assert_equal(
+      "Lütfen bir tamsayı girin [ENTER sonlandırır]: " \
+        "Geçersiz tamsayı: 'abc'. Lütfen tekrar girin: " \
+        "Girilen tamsayı: 7\n",
+      stdout
+    )
   end
 end
